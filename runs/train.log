@@ -1,0 +1,17 @@
+training on cpu
+step   2000  loss 0.6428  19.8s
+step   4000  loss 0.5769  36.1s
+step   6000  loss 0.5740  53.5s
+step   8000  loss 0.5747  70.0s
+step  10000  loss 0.5723  87.8s
+step  12000  loss 0.5716  103.9s
+step  14000  loss 0.5709  121.2s
+step  16000  loss 0.5708  138.7s
+step  18000  loss 0.5709  156.1s
+step  20000  loss 0.5698  172.8s
+step  22000  loss 0.5710  189.1s
+step  24000  loss 0.5698  206.3s
+step  26000  loss 0.5690  222.6s
+step  28000  loss 0.5680  238.5s
+step  30000  loss 0.5686  254.3s
+saved runs/model.pt

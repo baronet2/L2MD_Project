@@ -3,3 +3,6 @@ __pycache__/
 .DS_Store
 .venv/
 data/
+slurm/*.out
+runs/celeba/**/*.pt
+runs/celeba/*.pt

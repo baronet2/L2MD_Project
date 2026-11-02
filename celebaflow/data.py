@@ -55,8 +55,10 @@ class CelebA64:
         keep = d["split"] == SPLITS[split] if split != "all" else np.ones(len(d["split"]), bool)
         self.images = torch.from_numpy(d["images"][keep]).permute(0, 3, 1, 2).contiguous()  # N,3,H,W uint8
         self.attrs = torch.from_numpy(d["attrs"][keep])
-        self.attr_names = list(d["attr_names"])
+        self.attr_names = [str(n) for n in d["attr_names"]]
         self.files = d["files"][keep]
+        probs = Path(path).with_name("clf_probs.npy")  # written by `python -m celebaflow.classifier --cache`
+        self.clf_probs = torch.from_numpy(np.load(probs)[keep]).float() if probs.exists() else None
 
     def __len__(self):
         return len(self.images)
@@ -65,8 +67,15 @@ class CelebA64:
         return self.attrs[:, self.attr_names.index(name)]
 
     def pair_labels(self, pair):
-        """(N, 2) bool: the true values of the two pair labels."""
+        """(N, 2) bool: the CelebA values of the two pair labels."""
         return torch.stack([self.attr(a) == v for a, v in PAIRS[pair]], 1)
+
+    def pair_agrees(self, pair):
+        """(N,) bool: the attribute classifier agrees with CelebA on both pair labels. CelebA's labels
+        are noisy (e.g. about half of Blond_Hair & Male images are not visibly blond), so stage 2 drops
+        the images where they disagree."""
+        k = [self.attr_names.index(a) for a, _ in PAIRS[pair]]
+        return ((self.clf_probs[:, k] > 0.5) == self.attrs[:, k]).all(1)
 
 
 def to_float(x_uint8):

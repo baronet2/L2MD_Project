@@ -35,6 +35,8 @@ def build_labels(ds, args):
     g = torch.Generator().manual_seed(args.seed)
     full = ds.pair_labels(args.pair)
     keep = subsample_joint(full, args.keep_joint, g)
+    if args.clean:
+        keep &= ds.pair_agrees(args.pair)
     full = full[keep]
     obs = observed_labels(full, args.p_joint, g)
     both = full.all(1)
@@ -54,6 +56,7 @@ def main():
     ap.add_argument("--init", default=None, help="stage-1 checkpoint to fine-tune from")
     ap.add_argument("--p_joint", type=float, default=0.1)
     ap.add_argument("--keep_joint", type=float, default=1.0, help="fraction of A&B images kept")
+    ap.add_argument("--clean", action="store_true", help="drop images where classifier and CelebA disagree on the pair")
     ap.add_argument("--p_drop_label", type=float, default=0.3)
     ap.add_argument("--p_drop_all", type=float, default=0.1)
     ap.add_argument("--steps", type=int, default=200000)

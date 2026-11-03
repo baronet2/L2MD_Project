@@ -98,8 +98,8 @@ def observed_labels(full, p_joint, generator=None):
     with prob p_joint, otherwise one of them chosen uniformly at random. 0 = unknown."""
     full = full.float()
     multi = full.sum(1) > 1
-    keep_all = torch.rand(len(full), generator=generator) < p_joint
-    pick = torch.randint(0, 2, (len(full),), generator=generator)
+    keep_all = torch.rand(len(full), generator=generator, device=full.device) < p_joint
+    pick = torch.randint(0, 2, (len(full),), generator=generator, device=full.device)
     one = torch.nn.functional.one_hot(pick, 2).float()
     return torch.where((multi & ~keep_all)[:, None], one, full)
 

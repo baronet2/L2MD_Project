@@ -40,12 +40,19 @@ def build_labels(ds, args):
     full = full[keep]
     obs = observed_labels(full, args.p_joint, g)
     both = full.all(1)
+    group = torch.where(both, 0, torch.where(full[:, 0], 1, torch.where(full[:, 1], 2, 3)))  # AB, A, B, neither
+    if args.group_frac:
+        frac = torch.tensor([float(f) for f in args.group_frac.split(",")])
+        weights = (frac / torch.bincount(group, minlength=4).clamp(min=1))[group]
+    else:
+        weights = torch.ones(len(full))
     summary = {
         "n_images": int(keep.sum()), "n_true_A": int(full[:, 0].sum()), "n_true_B": int(full[:, 1].sum()),
         "n_true_AB": int(both.sum()), "n_shown_AB": int((obs.sum(1) == 2).sum()),
         "p_AB_given_A": float(both.sum() / full[:, 0].sum()), "p_AB_given_B": float(both.sum() / full[:, 1].sum()),
+        "sampled_frac_AB_A_B_neither": [round(float(weights[group == k].sum() / weights.sum()), 4) for k in range(4)],
     }
-    return keep.nonzero().squeeze(1), obs, summary
+    return keep.nonzero().squeeze(1), full, obs, weights, summary
 
 
 def main():
@@ -56,6 +63,10 @@ def main():
     ap.add_argument("--init", default=None, help="stage-1 checkpoint to fine-tune from")
     ap.add_argument("--p_joint", type=float, default=0.1)
     ap.add_argument("--keep_joint", type=float, default=1.0, help="fraction of A&B images kept")
+    ap.add_argument("--group_frac", default=None,
+                    help="batch fractions of AB,A-only,B-only,neither images, e.g. 0.1,0.3,0.3,0.3 (default: as in the data)")
+    ap.add_argument("--resample_obs", action="store_true",
+                    help="redraw which labels an AB image reveals every batch (flowtoy rule) instead of fixing them")
     ap.add_argument("--clean", action="store_true", help="drop images where classifier and CelebA disagree on the pair")
     ap.add_argument("--p_drop_label", type=float, default=0.3)
     ap.add_argument("--p_drop_all", type=float, default=0.1)
@@ -84,10 +95,10 @@ def main():
     ds = CelebA64(args.data, "train")
     n_labels = 2 if args.pair else 0
     if args.pair:
-        idx, obs, summary = build_labels(ds, args)
+        idx, full, obs, weights, summary = build_labels(ds, args)
         print("labels:", json.dumps(summary), flush=True)
         json.dump(summary, open(out / "labels_summary.json", "w"), indent=2)
-        images, obs = ds.images[idx].to(dev), obs.to(dev)
+        images, full, obs, weights = ds.images[idx].to(dev), full.to(dev), obs.to(dev), weights.to(dev)
     else:
         images = ds.images.to(dev)
     print(f"{len(images)} training images on {dev}", flush=True)
@@ -121,13 +132,16 @@ def main():
     t_start, running, n_run = time.time(), 0.0, 0
     model.train()
     while step < args.steps:
-        bi = torch.randint(0, len(images), (args.batch,), device=dev)
+        if args.pair:
+            bi = torch.multinomial(weights, args.batch, replacement=True)
+        else:
+            bi = torch.randint(0, len(images), (args.batch,), device=dev)
         x1 = to_float(images[bi])
         flip = torch.rand(args.batch, device=dev) < 0.5
         x1 = torch.where(flip[:, None, None, None], x1.flip(3), x1)
         y = None
         if args.pair:
-            y = obs[bi]
+            y = observed_labels(full[bi], args.p_joint) if args.resample_obs else obs[bi]
             y = y * (torch.rand_like(y) >= args.p_drop_label)
             y = y * (torch.rand(args.batch, 1, device=dev) >= args.p_drop_all)
         x0 = torch.randn_like(x1)

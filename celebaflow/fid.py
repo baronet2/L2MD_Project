@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from pytorch_fid.fid_score import calculate_frechet_distance
+from scipy import linalg
 from pytorch_fid.inception import InceptionV3
 
 from celebaflow.data import CelebA64, to_uint8
@@ -43,9 +43,19 @@ def ref_stats(inc, data, cache):
     return mu, sigma
 
 
+def frechet_distance(mu1, s1, mu2, s2):
+    # pytorch_fid's version passes disp= to scipy.linalg.sqrtm, which newer scipy no longer accepts
+    covmean = linalg.sqrtm(s1 @ s2)
+    if not np.isfinite(covmean).all():
+        eps = 1e-6 * np.eye(len(s1))
+        covmean = linalg.sqrtm((s1 + eps) @ (s2 + eps))
+    covmean = covmean.real
+    return float(((mu1 - mu2) ** 2).sum() + np.trace(s1) + np.trace(s2) - 2 * np.trace(covmean))
+
+
 def fid(inc, imgs_uint8, ref):
     mu, sigma = stats(inc.features(imgs_uint8))
-    return float(calculate_frechet_distance(mu, sigma, *ref))
+    return frechet_distance(mu, sigma, *ref)
 
 
 def load_ema(path, dev="cuda"):
